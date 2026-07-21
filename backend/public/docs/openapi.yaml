@@ -1,0 +1,491 @@
+openapi: 3.1.0
+info:
+  title: NEXUS Financial Twin API
+  version: 1.0.0
+  description: |
+    REST API for the NEXUS Digital Financial Twin platform.
+
+    Authentication uses Laravel Sanctum bearer tokens. Obtain a token via
+    `/auth/register` or `/auth/login` and send it as
+    `Authorization: Bearer <token>`.
+servers:
+  - url: /api/v1
+tags:
+  - name: Auth
+  - name: Twin
+  - name: Simulator
+  - name: Insights
+  - name: Advisor
+  - name: Goals
+  - name: Security
+  - name: Admin
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                monthly_income: { type: number }
+                birth_year: { type: integer }
+                occupation: { type: string }
+      responses:
+        "201":
+          description: User created with API token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      description: Returns 202 with `two_factor_required` when 2FA is enabled and no code was supplied.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                two_factor_code: { type: string }
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "202": { description: Two-factor code required }
+        "422": { description: Invalid credentials }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current token
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Logged out }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user profile
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The authenticated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+
+  /dashboard:
+    get:
+      tags: [Twin]
+      summary: Dashboard overview
+      description: Snapshot, health score, cash flow, category spend, goal progress and future wealth in one payload.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Dashboard payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  snapshot: { $ref: "#/components/schemas/Snapshot" }
+                  health_score: { $ref: "#/components/schemas/HealthScore" }
+                  monthly_cash_flow:
+                    type: array
+                    items: { $ref: "#/components/schemas/MonthlyCashFlow" }
+                  expense_by_category:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        category: { type: string }
+                        total: { type: number }
+                  goal_progress: { type: array, items: { type: object } }
+                  future_wealth: { type: object }
+
+  /twin/projection:
+    get:
+      tags: [Twin]
+      summary: Full twin projection
+      description: Best / expected / worst scenarios over 1, 3, 5 and 10 year horizons with quarterly series.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Projection result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  snapshot: { $ref: "#/components/schemas/Snapshot" }
+                  scenarios:
+                    type: object
+                    additionalProperties: { $ref: "#/components/schemas/ScenarioProjection" }
+
+  /timeline:
+    get:
+      tags: [Twin]
+      summary: Financial timeline (past, present, future milestones)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Timeline payload }
+
+  /simulations:
+    get:
+      tags: [Simulator]
+      summary: List recent decision simulations
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Recent simulations }
+    post:
+      tags: [Simulator]
+      summary: Run a life-decision simulation
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision_type, title, parameters]
+              properties:
+                decision_type:
+                  type: string
+                  enum: [buy_vehicle, buy_house, buy_gadget, marriage, children, start_business, take_loan, invest_more]
+                title: { type: string }
+                parameters:
+                  type: object
+                  properties:
+                    one_time_cost: { type: number }
+                    monthly_cost: { type: number }
+                    duration_months: { type: integer }
+                    loan_principal: { type: number }
+                    loan_months: { type: integer }
+                    loan_annual_rate: { type: number, description: "Decimal APR, e.g. 0.095" }
+      responses:
+        "201":
+          description: Simulation with before/after projections, goal delays and risk score
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Simulation" }
+
+  /simulations/{id}:
+    get:
+      tags: [Simulator]
+      summary: Get a simulation
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: The simulation }
+        "403": { description: Not the owner }
+
+  /insights:
+    get:
+      tags: [Insights]
+      summary: Behavioral insights and spending trends
+      description: Re-runs the behavior detectors (impulsive spending, lifestyle inflation, subscription waste, overspending trend, conservative saver).
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Insights and trends }
+
+  /advisor/ask:
+    post:
+      tags: [Advisor]
+      summary: Ask the AI financial advisor
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, example: "Can I afford a Rp15,000,000 laptop?" }
+      responses:
+        "200":
+          description: Personalized answer with supporting data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply: { type: string }
+                  data: { type: object, nullable: true }
+                  suggestions: { type: array, items: { type: string } }
+
+  /health-score:
+    get:
+      tags: [Twin]
+      summary: Compute (and store) the financial health score
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Score with component explanations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthScore" }
+
+  /health-score/history:
+    get:
+      tags: [Twin]
+      summary: Health score history
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Score snapshots over time }
+
+  /goals:
+    get:
+      tags: [Goals]
+      summary: Goals with completion forecasts
+      description: Each goal includes predicted completion date, success probability and risk factors.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Goal forecasts }
+    post:
+      tags: [Goals]
+      summary: Create a goal
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GoalInput" }
+      responses:
+        "201": { description: Goal created }
+
+  /goals/{id}:
+    put:
+      tags: [Goals]
+      summary: Update a goal
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Updated }
+        "403": { description: Not the owner }
+    delete:
+      tags: [Goals]
+      summary: Delete a goal
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /security/2fa/initiate:
+    post:
+      tags: [Security]
+      summary: Start 2FA enrollment (returns secret + otpauth URL)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Secret and QR provisioning URL }
+
+  /security/2fa/confirm:
+    post:
+      tags: [Security]
+      summary: Confirm 2FA with the first TOTP code
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "200": { description: Enabled; returns recovery codes }
+        "422": { description: Invalid code }
+
+  /security/2fa:
+    delete:
+      tags: [Security]
+      summary: Disable 2FA
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Disabled }
+
+  /security/sessions:
+    get:
+      tags: [Security]
+      summary: Active sessions / devices
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Token list with current-session flag }
+
+  /security/sessions/{tokenId}:
+    delete:
+      tags: [Security]
+      summary: Revoke a session
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: tokenId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Revoked }
+
+  /security/login-history:
+    get:
+      tags: [Security]
+      summary: Recent login history
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Login attempts with IP, device and status }
+
+  /security/audit-logs:
+    get:
+      tags: [Security]
+      summary: Personal audit log
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Paginated audit entries }
+
+  /admin/overview:
+    get:
+      tags: [Admin]
+      summary: Platform analytics (admin only)
+      description: User analytics, revenue, growth, risk monitoring and system health.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Admin analytics payload }
+        "403": { description: Admin access required }
+
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: Platform-wide audit logs (admin only)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Paginated audit entries }
+        "403": { description: Admin access required }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [user, admin] }
+        currency: { type: string }
+        monthly_income: { type: number }
+        two_factor_enabled: { type: boolean }
+    AuthResponse:
+      type: object
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        token: { type: string }
+    Snapshot:
+      type: object
+      properties:
+        net_worth: { type: number }
+        total_assets: { type: number }
+        total_liabilities: { type: number }
+        monthly_income: { type: number }
+        monthly_expense: { type: number }
+        monthly_surplus: { type: number }
+        savings_rate: { type: number }
+        debt_ratio: { type: number }
+    MonthlyCashFlow:
+      type: object
+      properties:
+        month: { type: string, example: "2026-07" }
+        income: { type: number }
+        expense: { type: number }
+    ScenarioProjection:
+      type: object
+      properties:
+        assumptions:
+          type: object
+          properties:
+            name: { type: string }
+            label: { type: string }
+            annual_income_growth: { type: number }
+            annual_expense_growth: { type: number }
+            annual_return: { type: number }
+        series:
+          type: array
+          items:
+            type: object
+            properties:
+              month: { type: integer }
+              date: { type: string, format: date }
+              value: { type: number }
+        horizons:
+          type: object
+          properties:
+            "1y": { type: number }
+            "3y": { type: number }
+            "5y": { type: number }
+            "10y": { type: number }
+    HealthScore:
+      type: object
+      properties:
+        score: { type: integer, minimum: 0, maximum: 100 }
+        grade: { type: string }
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              label: { type: string }
+              score: { type: integer }
+              weight: { type: number }
+              value: { type: number }
+              explanation: { type: string }
+    GoalInput:
+      type: object
+      required: [name, type, target_amount, target_date]
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [house, car, wedding, emergency_fund, vacation, investment, custom] }
+        icon: { type: string }
+        target_amount: { type: number }
+        current_amount: { type: number }
+        monthly_contribution: { type: number }
+        target_date: { type: string, format: date }
+    Simulation:
+      type: object
+      properties:
+        id: { type: integer }
+        decision_type: { type: string }
+        title: { type: string }
+        parameters: { type: object }
+        result:
+          type: object
+          properties:
+            before: { $ref: "#/components/schemas/ScenarioProjection" }
+            after: { $ref: "#/components/schemas/ScenarioProjection" }
+            impact: { type: object }
+            goal_delays: { type: array, items: { type: object } }
+            risk:
+              type: object
+              properties:
+                score: { type: integer }
+                level: { type: string, enum: [low, moderate, high] }
+                summary: { type: string }

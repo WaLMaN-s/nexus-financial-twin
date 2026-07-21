@@ -83,6 +83,23 @@ npm run dev                     # proxies /api → localhost:8000
 
 Open **http://localhost:3000**.
 
+### Production hosting
+
+On any Ubuntu/Debian server with Docker installed:
+
+```bash
+git clone https://github.com/WaLMaN-s/nexus-financial-twin.git && cd nexus-financial-twin
+./deploy.sh                          # HTTP on port 8080
+DOMAIN=twin.example.com ./deploy.sh  # public HTTPS via Caddy + Let's Encrypt
+```
+
+`deploy.sh` is idempotent — re-run it to ship updates (pulls, rebuilds,
+migrates, re-caches config). All services carry `restart: unless-stopped`, so
+the stack survives reboots. For HTTPS, point your domain's A record at the
+server first; certificates are issued and renewed automatically. Set a strong
+`DB_PASSWORD` in a root-level `.env` (compose reads it) and keep
+`backend/.env` out of git (it already is).
+
 ## API documentation
 
 OpenAPI 3.1 spec: [`backend/public/docs/openapi.yaml`](backend/public/docs/openapi.yaml)

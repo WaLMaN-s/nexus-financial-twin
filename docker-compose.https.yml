@@ -1,0 +1,34 @@
+# HTTPS overlay — run when you have a public domain pointing at this server:
+#
+#   DOMAIN=twin.example.com docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+#
+# Caddy terminates TLS on 80/443 with automatic Let's Encrypt certificates and
+# proxies to the internal nginx. The nginx port mapping moves aside so Caddy
+# owns the public ports.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: nexus-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN to your public hostname}
+    command: sh -c 'printf "%s {\n  encode gzip\n  reverse_proxy nginx:80\n}\n" "$$DOMAIN" > /etc/caddy/Caddyfile && caddy run --config /etc/caddy/Caddyfile'
+    volumes:
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - nginx
+    networks:
+      - nexus
+
+  nginx:
+    # Caddy owns the public ports; nginx stays internal-only.
+    ports: !override []
+
+volumes:
+  caddydata:
+  caddyconfig:

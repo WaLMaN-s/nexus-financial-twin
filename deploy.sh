@@ -44,8 +44,10 @@ echo "==> Building and starting containers"
 # The backend bind mount (./backend) shadows the vendor/ dir baked into the
 # image, so dependencies must be installed into the mounted tree.
 echo "==> Installing backend dependencies"
-"${COMPOSE[@]}" exec -T -u root -e COMPOSER_ALLOW_SUPERUSER=1 backend \
-  composer install --no-dev --optimize-autoloader --no-interaction
+"${COMPOSE[@]}" exec -T -u root -e COMPOSER_ALLOW_SUPERUSER=1 backend sh -c '
+  composer install --no-dev --optimize-autoloader --no-interaction &&
+  chown -R www-data:www-data storage bootstrap/cache
+'
 
 echo "==> Waiting for backend, then migrating"
 "${COMPOSE[@]}" exec -T backend sh -c '

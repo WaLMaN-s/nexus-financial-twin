@@ -41,6 +41,12 @@ sudo chown -R 33:33 backend/storage backend/bootstrap/cache
 echo "==> Building and starting containers"
 "${COMPOSE[@]}" up -d --build --remove-orphans
 
+# The backend bind mount (./backend) shadows the vendor/ dir baked into the
+# image, so dependencies must be installed into the mounted tree.
+echo "==> Installing backend dependencies"
+"${COMPOSE[@]}" exec -T -u root -e COMPOSER_ALLOW_SUPERUSER=1 backend \
+  composer install --no-dev --optimize-autoloader --no-interaction
+
 echo "==> Waiting for backend, then migrating"
 "${COMPOSE[@]}" exec -T backend sh -c '
   i=0; until php artisan migrate --force 2>/dev/null; do

@@ -58,5 +58,10 @@ echo "==> Waiting for backend, then migrating"
   php artisan config:cache
 '
 
+# nginx resolves upstream container IPs at startup; recreated backend/frontend
+# containers get new IPs, so nginx must re-resolve or it serves 502s.
+echo "==> Reloading nginx"
+"${COMPOSE[@]}" restart nginx
+
 echo "==> Done"
 "${COMPOSE[@]}" ps

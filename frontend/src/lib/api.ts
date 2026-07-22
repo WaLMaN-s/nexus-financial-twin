@@ -322,8 +322,27 @@ function demoAdvisorReply(message: string): AdvisorReply {
 export const getSessions = () => readOrDemo<SessionInfo[]>("/security/sessions", demoSessions);
 export const getLoginHistory = () =>
   readOrDemo<LoginHistoryEntry[]>("/security/login-history", demoLoginHistory);
-export const getAdminOverview = () =>
-  readOrDemo<AdminOverview>("/admin/overview", demoAdminOverview);
+/**
+ * Admin analytics. Unlike other reads, a 403 must NOT fall back to the demo
+ * fixture — a signed-in non-admin would see convincing fake platform data.
+ * Returns null when the caller is authenticated but not an admin.
+ */
+export async function getAdminOverview(): Promise<AdminOverview | null> {
+  if (!getToken()) {
+    demoMode = true;
+    return demoAdminOverview;
+  }
+  try {
+    const data = await request<AdminOverview>("/admin/overview");
+    demoMode = false;
+    return data;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 403) return null;
+    if (error instanceof ApiError && error.status === 401) setToken(null);
+    demoMode = true;
+    return demoAdminOverview;
+  }
+}
 
 export async function revokeSession(id: number) {
   return request(`/security/sessions/${id}`, { method: "DELETE" });

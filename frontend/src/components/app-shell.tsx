@@ -63,9 +63,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     .slice(0, 2)
     .join("");
 
+  // The admin console is only for admins — but in demo mode (no account) it
+  // stays visible as part of the labeled product tour.
+  const items = navigation.filter(
+    (item) => item.href !== "/admin" || demo || user?.role === "admin",
+  );
+
   const nav = (
     <nav className="flex flex-1 flex-col gap-0.5">
-      {navigation.map((item) => {
+      {items.map((item) => {
         const active = pathname.startsWith(item.href);
         return (
           <Link

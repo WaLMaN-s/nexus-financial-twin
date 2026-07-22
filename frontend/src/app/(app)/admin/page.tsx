@@ -34,10 +34,29 @@ import type { AdminOverview } from "@/lib/types";
 
 export default function AdminPage() {
   const [overview, setOverview] = React.useState<AdminOverview | null>(null);
+  const [denied, setDenied] = React.useState(false);
 
   React.useEffect(() => {
-    getAdminOverview().then(setOverview);
+    getAdminOverview().then((data) => {
+      if (data) setOverview(data);
+      else setDenied(true);
+    });
   }, []);
+
+  if (denied) {
+    return (
+      <Card className="mx-auto mt-12 max-w-md text-center">
+        <CardHeader>
+          <ShieldAlert className="mx-auto size-10 text-muted-foreground" />
+          <CardTitle>Admin access required</CardTitle>
+          <CardDescription>
+            Your account does not have the admin role. Sign in with an admin
+            account to view platform analytics.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   if (!overview) {
     return (
